@@ -138,6 +138,8 @@ parser.add_argument('--print', action='store_true', default=False,
                     help='do not run training/prediction but only print model information, e.g., FLOPs and number of parameters of a model')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
+parser.add_argument('--profile-forward', action='store_true', default=False, help="run the profiler for forward passes over a single epoch")
+parser.add_argument('--profile-full', action='store_true', default=False, help="run the profiler for a full training loop over a single epoch")
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
 parser.add_argument('--cross-validation', type=str, default=None,
@@ -815,6 +817,77 @@ def _main(args):
             lr_finder.range_test(train_loader, start_lr=float(start_lr), end_lr=float(end_lr), num_iter=int(num_iter))
             lr_finder.plot(output='lr_finder.png')  # to inspect the loss-learning rate graph
             return
+
+
+        if args.profile_forward:
+            import tqdm
+            grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
+
+            with torch.profiler.profile( 
+                activities=[ 
+                    torch.profiler.ProfilerActivity.CPU, 
+                    torch.profiler.ProfilerActivity.CUDA, 
+                ], 
+                with_flops=True, 
+                profile_memory=True 
+            ) as prof: 
+
+                # profile forward pass of one epoch     
+                data_config = train_loader.dataset.config
+                with tqdm.tqdm(train_loader) as tq:
+                    for X, y, _ in tq:
+                        inputs = [X[k].to(dev) for k in data_config.input_names]
+                        _label = y[data_config.label_names[0]].long().to(dev)
+                        opt.zero_grad()
+                        with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
+                            _model_output = model(*inputs)
+                
+            ## profiling results
+        
+            profiling_results = prof.key_averages().table( 
+                sort_by="cpu_time_total",
+                row_limit=10
+            )
+            _logger.info(profiling_results)
+            prof.export_chrome_trace("profile_forward.json")
+
+        if args.profile_full:
+            import tqdm
+            grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
+
+            with torch.profiler.profile( 
+                activities=[ 
+                    torch.profiler.ProfilerActivity.CPU, 
+                    torch.profiler.ProfilerActivity.CUDA, 
+                ], 
+                with_flops=True, 
+                profile_memory=True 
+            ) as prof: 
+
+                # Here train calls model.forward() and loss.backward()
+                
+                train(
+                    model,
+                    loss_func,
+                    opt,
+                    scheduler,
+                    train_loader,
+                    dev,
+                    epoch=0,
+                    steps_per_epoch=args.steps_per_epoch,
+                    grad_scaler=grad_scaler,
+                    tb_helper=tb
+                )
+                
+            ## profiling results
+        
+            profiling_results = prof.key_averages().table( 
+                sort_by="cpu_time_total",
+                row_limit=10
+            )
+            _logger.info(profiling_results)
+            prof.export_chrome_trace("profile_full.json")
+        
 
         # training loop
         best_valid_metric = np.inf if args.regression_mode else 0
