@@ -138,6 +138,8 @@ parser.add_argument('--print', action='store_true', default=False,
                     help='do not run training/prediction but only print model information, e.g., FLOPs and number of parameters of a model')
 parser.add_argument('--profile', action='store_true', default=False,
                     help='run the profiler')
+parser.add_argument('--flops', action='store_true', default=False,
+                    help='show the FLOPs used in a forward pass of the model')
 parser.add_argument('--backend', type=str, choices=['gloo', 'nccl', 'mpi'], default=None,
                     help='backend for distributed training')
 parser.add_argument('--cross-validation', type=str, default=None,
@@ -773,7 +775,10 @@ def _main(args):
 
     if args.print:
         return
-
+    
+    if args.flops:
+        flops(model, model_info, device=dev)
+        return
     if args.profile:
         profile(args, model, model_info, device=dev)
         return
