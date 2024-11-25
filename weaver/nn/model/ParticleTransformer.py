@@ -538,17 +538,21 @@ class ParticleTransformer(nn.Module):
         # mask: (N, 1, P) -- real particle = 1, padded = 0
         # for pytorch: uu (N, C', num_pairs), uu_idx (N, 2, num_pairs)
         # for onnx: uu (N, C', P, P), uu_idx=None
+        _logger.info(f"x: {x.shape}, v: {v.shape if v is not None else None}, mask: {mask.shape if mask is not None else None}, uu: {uu.shape if uu is not None else None}, uu_idx: {uu_idx.shape if uu_idx is not None else None}")
 
         with torch.no_grad():
             if not self.for_inference:
                 if uu_idx is not None:
                     uu = build_sparse_tensor(uu, uu_idx, x.size(-1))
             x, v, mask, uu = self.trimmer(x, v, mask, uu)
+            _logger.info(f"x: {x.shape}, v: {v.shape if v is not None else None}, mask: {mask.shape if mask is not None else None}, uu: {uu.shape if uu is not None else None}, uu_idx: {uu_idx.shape if uu_idx is not None else None}")
+
             padding_mask = ~mask.squeeze(1)  # (N, P)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             # input embedding
             x = self.embed(x).masked_fill(~mask.permute(2, 0, 1), 0)  # (P, N, C)
+            _logger.info(f"permuted mask shape: {mask.permute(2, 0, 1).shape}, x shape: {x.shape}")
             attn_mask = None
             if (v is not None or uu is not None) and self.pair_embed is not None:
                 attn_mask = self.pair_embed(v, uu).view(-1, v.size(-1), v.size(-1))  # (N*num_heads, P, P)
