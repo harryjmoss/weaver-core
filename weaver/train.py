@@ -820,6 +820,8 @@ def _main(args):
 
 
         if args.profile_forward:
+            _logger.info("Profiling forward pass of one epoch!")
+
             import tqdm
             grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
@@ -852,6 +854,7 @@ def _main(args):
             prof.export_chrome_trace("profile_forward.json")
 
         if args.profile_full:
+            _logger.info("Profiling full training loop - forward and backward pass!")
             import tqdm
             grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
