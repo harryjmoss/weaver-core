@@ -11,6 +11,7 @@ import numpy as np
 import math
 import copy
 import torch
+import time
 
 from torch.utils.data import DataLoader
 from weaver.utils.logger import _logger, _configLogger
@@ -821,7 +822,8 @@ def _main(args):
 
         if args.profile_forward:
             _logger.info("Profiling forward pass of one epoch!")
-
+            time.sleep(5)
+            _logger.info("Beginning profiling...")
             import tqdm
             grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
 
@@ -852,6 +854,7 @@ def _main(args):
             )
             _logger.info(profiling_results)
             prof.export_chrome_trace("profile_forward.json")
+            return
 
         if args.profile_full:
             _logger.info("Profiling full training loop - forward and backward pass!")
@@ -890,7 +893,7 @@ def _main(args):
             )
             _logger.info(profiling_results)
             prof.export_chrome_trace("profile_full.json")
-        
+            return
 
         # training loop
         best_valid_metric = np.inf if args.regression_mode else 0
